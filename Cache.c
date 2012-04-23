@@ -312,12 +312,18 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 //	printf("Result : %d\n",sscanf(wb_block->buf+offset,"%[^\n]\n",line));
 
 	if ( sscanf(wb_block->buf+offset,"%[^\n]\n",line) == 1 ) {
-		offset += strlen(line) + 1 ;
 //              printf("%s\n",line);
-                sscanf(line,"%*[^|]|%[^|]|%*s",timestamp);
-		sscanf(timestamp,"%*[^ ] %*[^ ] %*[^ ] %[^ ] %*[^ ] %*s",startTime);
-		strcpy(lastSeenDate,timestamp);
-		create_date_folder(lastSeenDate,chunk_path,folderName);
+                if ( wb_block->buf[offset+strlen(line)] == '\n' && sscanf(line,"%*[^|]|%[^|]|%*s",timestamp) == 1)  {
+			if ( sscanf(timestamp,"%*[^ ] %*[^ ] %*[^ ] %[^ ] %*[^ ] %*s",startTime) == 1 ) {
+				strcpy(lastSeenDate,timestamp);
+				create_date_folder(lastSeenDate,chunk_path,folderName);
+				offset += strlen(line) + 1 ;
+			} else 
+				printf("Fetching startTime from timestamp failed.Line is not complete\n"); 
+		} else {
+
+			printf("Fetching timestamp from line failed.Line is not complete\n"); 
+		}
 	}
 
 

@@ -1,12 +1,6 @@
 all:
-	gcc -g Util.c -c -o Util.o
-	gcc -g Client.c Util.o -o client -lpthread
-	gcc -g Server.c Util.o -o server -lpthread
-client: Util
-	gcc Client.c Util.o -o client -lpthread
-Util:
-	gcc Util.c -c -o Util.o
-server: Util
-	gcc Server.c Util.o -o server -lpthread
+	gcc -g -w -c Cache.c -o Cache.o 
+	gcc -g -w -Wall `pkg-config fuse --cflags --libs` lfs_fuse.c Cache.o -o lfs_fuse
 clean:
-	rm Util.o client server
+	rm lfs_fuse Cache.o
+

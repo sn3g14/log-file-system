@@ -1,5 +1,5 @@
-ERROR|Sat Mar 17 23:33:43 EDT 2012|File Not Found
-ERROR|Sat Mar 17 23:33:43 EDT 2012|File Not Found
+ERROR|Sat Mar 17 23:33:43 EDT 2012| 0000000 File Not Found
+ERROR|Sat Mar 17 23:33:43 EDT 2012| 0000001 File Not Found
 ERROR|Sat Mar 17 23:33:43 EDT 2012|File Not Found
 ERROR|Sat Mar 17 23:33:43 EDT 2012|File Not Found
 ERROR|Sat Mar 17 23:33:43 EDT 2012|File Not Found
@@ -19,6 +19,8 @@ ERROR|Sat Mar 17 23:33:43 EDT 2012|444 File Not Found
 ERROR|Sat Mar 17 23:33:43 EDT 2012| 333333  File Not Found
 ERROR|Sat Mar 17 23:33:43 EDT 2012|222222 File Not Found
 ERROR|Sat Mar 17 23:33:43 EDT 2012| 111111 File Not Found
+ERROR|Sat Mar 18 23:33:43 EDT 2012| 000001 Folder Not Found
+ERROR|Sat Mar 18 23:33:43 EDT 2012| 000002 Folder Not Found
 ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
 ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
 ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
@@ -48,10 +50,8 @@ ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
 ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
 ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
 ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
-ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
-ERROR|Sat Mar 18 23:33:43 EDT 2012|Folder Not Found
-ERROR|Sat Mar 19 23:33:43 EDT 2012|Folder Not Found
-ERROR|Sat Mar 19 23:33:43 EDT 2012|Folder Not Found
+ERROR|Sat Mar 19 23:33:43 EDT 2012| 000001 Folder Not Found
+ERROR|Sat Mar 19 23:33:43 EDT 2012| 000002 Folder Not Found
 ERROR|Sat Mar 19 23:33:43 EDT 2012|Folder Not Found
 ERROR|Sat Mar 19 23:33:43 EDT 2012|File Not Found
 DEBUG|Sat Mar 19 23:33:43 EDT 2012|File Not Found
