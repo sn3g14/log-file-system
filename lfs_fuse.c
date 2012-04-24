@@ -157,7 +157,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 	}
         print_cache_block(meta_data_block);
 
-	print_cache(buffer_cache);
+	//print_cache(buffer_cache);
 	CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
 
         if( wbuf_data_block == NULL )
@@ -171,7 +171,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 		stbuf->st_size = meta_data_block->mdata->size + wbuf_data_block->offset;
         }
 
-	stbuf->st_size += meta_data_block->mdata->num_paths;
+	// stbuf->st_size += meta_data_block->mdata->num_paths; needed only if \n has to be appended manually after each chunk
 	printf("ST_BUF_SIZE : %d\n",stbuf->st_size); 
 
 	return 0;
@@ -441,9 +441,9 @@ static int lfs_read(const char *path, char *buf, size_t size, off_t offset,
 		fptr = fopen(meta_data_block->mdata->path[i],"r");
 		printf("\nbufOffset : %d\n",bufOffset);
 		numBytes = fread(buf+bufOffset,1,meta_data_block->mdata->size,fptr);
-		buf[bufOffset+numBytes] = '\n';
+	//	buf[bufOffset+numBytes] = '\n';
 //		buf[bufOffset+numBytes+1] = '\0';
-		bufOffset += numBytes+1 ;
+		bufOffset += numBytes; // +1 ;
 		fclose(fptr);
 
 
@@ -546,9 +546,10 @@ static int lfs_write(const char *path, const char *buf, size_t size,
 	}
 
 	update_lru(buffer_cache,wbuf_data_block);	
-	strcat(wbuf_data_block->buf,buf);
-	wbuf_data_block->offset += strlen(buf);
-	printf("Buffer contents after writing to disk:%s********\n",wbuf_data_block->buf);
+	//strcat(wbuf_data_block->buf,buf);
+	memcpy(wbuf_data_block->buf + wbuf_data_block->offset,buf,size);
+	wbuf_data_block->offset += size ;
+	printf("Offset : %d \nBuffer contents after writing to disk:%s********\n",wbuf_data_block->offset ,wbuf_data_block->buf);
 
 	(void) fi;
 	//fd = open(path, O_WRONLY);
@@ -561,7 +562,8 @@ static int lfs_write(const char *path, const char *buf, size_t size,
 	//	res = -errno;
 
 	//close(fd);
-	return strlen(buf);
+	printf("Actual received size : %d Length of buf : %d\n",size,strlen(buf));
+	return size;//strlen(buf);
 }
 
 static int lfs_statfs(const char *path, struct statvfs *stbuf)

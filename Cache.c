@@ -330,11 +330,13 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	int id=0;
 	char chunk_file_name[MAX_FILE_NAME_SIZE];
 	struct stat statbuf;
+	int lineInCompleteFlag = 0;
 
 	while(sscanf(wb_block->buf+offset,"%[^\n]\n",line) == 1 ) {
 //		printf("%s\n",line);
 		if ( wb_block->buf[offset+strlen(line)] != '\n' ||    sscanf(line,"%*[^|]|%[^|]|%*s",timestamp) != 1 ) {
 			printf("LINE IS NOT COMPLETE\n");
+			lineInCompleteFlag = 1;
 			break;
 		}
 		//printf("Time : %s\n",timestamp);
@@ -404,12 +406,14 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	close(fd);
 
 
-	memset(wb_block->buf,0,buffer_cache->cache_block_size);
-	if ( wb_block->buf[offset+strlen(line)] != '\n') {
+//	if ( wb_block->buf[offset+strlen(line)] != '\n') {
+	if ( lineInCompleteFlag == 1 ) {
+		memset(wb_block->buf,0,buffer_cache->cache_block_size);
 		strcpy(wb_block->buf,line);
 		printf("REMAINING BUF CONTENT : %s\n",wb_block->buf);
 		wb_block->offset = strlen(line);
 	} else {
+		memset(wb_block->buf,0,buffer_cache->cache_block_size);
 	        wb_block->offset = 0;
 	}
 	
