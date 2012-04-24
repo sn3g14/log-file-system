@@ -82,5 +82,7 @@ int is_dates_equal(char *timestamp1,char *timestamp2) ;
 int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache);
 
 
+/* Free the given cache block */
 
+int free_cache_block(CACHE c,CBLK cache_blk);
 

@@ -103,6 +103,11 @@ CBLK get_free_cache_block(CACHE c , int *result) {
 	int index=-1;
 	int i=0;
 	for(i=0;i<c->num_blocks;i++) {
+		if ( c->cblocks[i].free_flag == true) {
+			index = i;
+			break;
+		}
+
 		if( max < c->cblocks[i].lru_counter) {
 			max = c->cblocks[i].lru_counter;
 			index = i;
@@ -330,11 +335,13 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	int id=0;
 	char chunk_file_name[MAX_FILE_NAME_SIZE];
 	struct stat statbuf;
+	int lineInCompleteFlag = 0;
 
 	while(sscanf(wb_block->buf+offset,"%[^\n]\n",line) == 1 ) {
 //		printf("%s\n",line);
 		if ( wb_block->buf[offset+strlen(line)] != '\n' ||    sscanf(line,"%*[^|]|%[^|]|%*s",timestamp) != 1 ) {
 			printf("LINE IS NOT COMPLETE\n");
+			lineInCompleteFlag = 1;
 			break;
 		}
 		//printf("Time : %s\n",timestamp);
@@ -404,14 +411,28 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	close(fd);
 
 
-	memset(wb_block->buf,0,buffer_cache->cache_block_size);
-	if ( wb_block->buf[offset+strlen(line)] != '\n') {
+//	if ( wb_block->buf[offset+strlen(line)] != '\n') {
+	if ( lineInCompleteFlag == 1 ) {
+		memset(wb_block->buf,0,buffer_cache->cache_block_size);
 		strcpy(wb_block->buf,line);
 		printf("REMAINING BUF CONTENT : %s\n",wb_block->buf);
 		wb_block->offset = strlen(line);
 	} else {
+		memset(wb_block->buf,0,buffer_cache->cache_block_size);
 	        wb_block->offset = 0;
 	}
+	
+}
+
+int free_cache_block(CACHE c,CBLK cache_blk) {
+	cache_blk->free_flag = true;
+	if ( c->type == WRITE_BUFFER ) {
+		memset(cache_blk->buf,0,c->cache_block_size);
+		cache_blk->offset = 0;
+		cache_blk->mdata = NULL;
+	}
+
+	cache_blk->lru_counter = 0;
 	
 }
 /*

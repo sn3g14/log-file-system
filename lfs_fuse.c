@@ -25,7 +25,7 @@
 #include "Cache.h"
 
 
-#define LOAD_PATH "/home/vino/Desktop/serverfilesystem"
+#define LOAD_PATH  "/home/vino/Desktop/serverfilesystem"
 #define MDATA_PATH "/home/vino/Desktop/ESS/metadata/"
 #define CHUNK_PATH "/home/vino/Desktop/ESS/Chunks/"
 #define MDATA_CBLK_WRITE_THROUGH 1
@@ -157,7 +157,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 	}
         print_cache_block(meta_data_block);
 
-	print_cache(buffer_cache);
+	//print_cache(buffer_cache);
 	CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
 
         if( wbuf_data_block == NULL )
@@ -171,7 +171,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 		stbuf->st_size = meta_data_block->mdata->size + wbuf_data_block->offset;
         }
 
-	stbuf->st_size += meta_data_block->mdata->num_paths;
+	// stbuf->st_size += meta_data_block->mdata->num_paths; needed only if \n has to be appended manually after each chunk
 	printf("ST_BUF_SIZE : %d\n",stbuf->st_size); 
 
 	return 0;
@@ -230,6 +230,59 @@ static int lfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	closedir(dp);
 	return 0;
 }
+static int lfs_unlink(const char *path)
+{
+	int res;
+
+	printf("\n\n\nIn lfs_unlink. \n\n");
+
+        CBLK meta_data_block = find_meta_data_block(meta_data_cache,path+1);
+
+        if ( meta_data_block == NULL ) {
+                meta_data_block = mdata_from_disk_to_memory(path);
+                assert(meta_data_block);
+                printf("UNLINK : meta_data_block is not found in cache , hence allocating new\n");
+        } 
+
+//        print_cache_block(meta_data_block);
+
+  //      print_cache(buffer_cache);
+
+
+        int i;
+        for(i=0;i<meta_data_block->mdata->num_paths;i++) {
+                unlink(meta_data_block->mdata->path[i]);
+		printf("Removing Chunk : %s\n", meta_data_block->mdata->path[i]);
+        }
+	
+	char metadata_file[MAX_PATH_NAME_SIZE];
+	strcpy(metadata_file,MDATA_PATH);
+	strcat(metadata_file,path);
+	unlink(metadata_file);
+
+	free_cache_block(meta_data_cache,meta_data_block);
+
+	printf("METADATA CACHE AFTER FREEING\n");
+	print_cache(meta_data_cache);
+        CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
+        if(wbuf_data_block != NULL) {
+		free_cache_block(buffer_cache,wbuf_data_block);
+		printf("BUFFER CACHE AFTER FREEING\n");
+		print_cache(buffer_cache);
+        }
+
+	strcpy(load_path,LOAD_PATH);
+	strcat(load_path,path);
+	res = unlink(load_path);
+
+/* Remove the date directory if it is empty */
+
+	if (res == -1)
+		return -errno;
+
+	return 0;
+}
+
 
 static int lfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
@@ -239,6 +292,15 @@ static int lfs_mknod(const char *path, mode_t mode, dev_t rdev)
 
 	strcpy(load_path,LOAD_PATH);
 	strcat(load_path,path);
+
+/*
+	struct stat stBuf;
+	int tmpRes = stat(load_path,&stBuf) ;
+	printf("Result of stat : %d for path : %s \n",tmpRes,load_path);
+	if ( tmpRes != -1 ) {
+		lfs_unlink(path);
+	}
+*/
 
 	if (S_ISREG(mode)) {
 		res = open(load_path, O_CREAT | O_EXCL | O_WRONLY, mode);
@@ -276,18 +338,6 @@ static int lfs_mkdir(const char *path, mode_t mode)
 	strcpy(load_path,LOAD_PATH);
 	strcat(load_path,path);
 	res = mkdir(load_path, mode);
-	if (res == -1)
-		return -errno;
-
-	return 0;
-}
-
-static int lfs_unlink(const char *path)
-{
-	int res;
-	strcpy(load_path,LOAD_PATH);
-	strcat(load_path,path);
-	res = unlink(load_path);
 	if (res == -1)
 		return -errno;
 
@@ -365,10 +415,54 @@ static int lfs_chown(const char *path, uid_t uid, gid_t gid)
 
 static int lfs_truncate(const char *path, off_t size)
 {
-	int res;
-	strcpy(load_path,LOAD_PATH);
-	strcat(load_path,path);
-	res = truncate(load_path, size);
+	int res=0;
+
+//	strcpy(load_path,LOAD_PATH);
+//	strcat(load_path,path);
+	
+	size = 0; // truncate will always empty the file irrespective of the size
+        printf("\n\n\nIn truncate. \n\n");
+
+        CBLK meta_data_block = find_meta_data_block(meta_data_cache,path+1);
+
+        if ( meta_data_block == NULL ) {
+                meta_data_block = mdata_from_disk_to_memory(path);
+                assert(meta_data_block);
+                printf("TRUNCATE : meta_data_block is not found in cache , hence allocating new\n");
+        }
+
+//        print_cache_block(meta_data_block);
+
+  //      print_cache(buffer_cache);
+
+
+        int i;
+        for(i=0;i<meta_data_block->mdata->num_paths;i++) {
+                unlink(meta_data_block->mdata->path[i]);
+                printf("Removing Chunk : %s\n", meta_data_block->mdata->path[i]);
+        }
+
+	meta_data_block->mdata->num_paths = 0;
+	meta_data_block->mdata->size = 0;
+
+	write_metadata_to_disk(meta_data_block->mdata,MDATA_PATH);	
+	
+	// Since truncate will only be called when overwriting , no need to free cache_block . It will be reused for later writes which follow truncate.
+        //free_cache_block(meta_data_cache,meta_data_block);
+
+        printf("METADATA CACHE AFTER TRUNCATING\n");
+        print_cache_block(meta_data_block);
+
+        CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
+        if(wbuf_data_block != NULL) {
+		wbuf_data_block->offset = 0;
+		memset(wbuf_data_block->buf,0,buffer_cache->cache_block_size);
+
+                printf("BUFFER CACHE AFTER TRUNCATING\n");
+                print_cache(buffer_cache);
+        }
+
+	//res = truncate(load_path, size);
 	if (res == -1)
 		return -errno;
 
@@ -441,9 +535,9 @@ static int lfs_read(const char *path, char *buf, size_t size, off_t offset,
 		fptr = fopen(meta_data_block->mdata->path[i],"r");
 		printf("\nbufOffset : %d\n",bufOffset);
 		numBytes = fread(buf+bufOffset,1,meta_data_block->mdata->size,fptr);
-		buf[bufOffset+numBytes] = '\n';
+	//	buf[bufOffset+numBytes] = '\n';
 //		buf[bufOffset+numBytes+1] = '\0';
-		bufOffset += numBytes+1 ;
+		bufOffset += numBytes; // +1 ;
 		fclose(fptr);
 
 
@@ -546,9 +640,10 @@ static int lfs_write(const char *path, const char *buf, size_t size,
 	}
 
 	update_lru(buffer_cache,wbuf_data_block);	
-	strcat(wbuf_data_block->buf,buf);
-	wbuf_data_block->offset += strlen(buf);
-	printf("Buffer contents after writing to disk:%s********\n",wbuf_data_block->buf);
+	//strcat(wbuf_data_block->buf,buf);
+	memcpy(wbuf_data_block->buf + wbuf_data_block->offset,buf,size);
+	wbuf_data_block->offset += size ;
+	printf("Offset : %d \nBuffer contents after writing to disk:%s********\n",wbuf_data_block->offset ,wbuf_data_block->buf);
 
 	(void) fi;
 	//fd = open(path, O_WRONLY);
@@ -561,7 +656,8 @@ static int lfs_write(const char *path, const char *buf, size_t size,
 	//	res = -errno;
 
 	//close(fd);
-	return strlen(buf);
+	printf("Actual received size : %d Length of buf : %d\n",size,strlen(buf));
+	return size;//strlen(buf);
 }
 
 static int lfs_statfs(const char *path, struct statvfs *stbuf)
