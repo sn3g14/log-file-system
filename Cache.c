@@ -152,13 +152,22 @@ int read_cache_block(CACHE c,MDATA *meta_data,char *out_buf,int *buf_len ) {
 
 CBLK find_meta_data_block(CACHE c,char *file_name) {
 //	if(c->type == METADATA_CACHE) {
-		int i=0;
-		for(i=0;i<c->num_blocks;i++) {
-			if(c->cblocks[i].free_flag == false && c->cblocks[i].mdata!= NULL && strcmp(c->cblocks[i].mdata->file_name,file_name) ==0 ) {
-				return c->cblocks+i;
-			}
+	int i=0;
+	for(i=0;i<c->num_blocks;i++) {
+		if(c->cblocks[i].free_flag == false && c->cblocks[i].mdata!= NULL && strcmp(c->cblocks[i].mdata->file_name,file_name) ==0 ) {
+			return c->cblocks+i;
 		}
+	}
 
+	//Searching for hard link
+	int j=0;
+	for(i=0;i<c->num_blocks;i++) {
+		if(c->cblocks[i].free_flag == false && c->cblocks[i].mdata!= NULL ) {
+			for(j=0;j < c->cblocks[i].mdata->num_links;j++) 
+				if(strcmp(c->cblocks[i].mdata->link_names[j],file_name)==0 )
+					return c->cblocks+i;
+		}
+	}
 /*	} else {
 		fprintf(stderr,"ERROR:Wrong type of cache\n");
 		return NULL;

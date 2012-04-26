@@ -61,6 +61,16 @@ int write_metadata_to_disk(MDATA *mdata, char *mdata_path)
 		strcat(buf,";");
 	}
 	strcat(buf,"\n");
+	strcat(buf,"Links:");
+        for(i=0;i < mdata->num_links;i++)
+        {
+                strcat(buf,mdata->link_names[i]);
+                strcat(buf,";");
+        }
+
+	strcat(buf,"\n");
+	sprintf(buf + strlen(buf),"NumLinks:%d",mdata->num_links);	
+
 	int bytes_written;
 	bytes_written = write(fd,buf,strlen(buf));
         if(bytes_written < 0)
@@ -76,11 +86,7 @@ CBLK mdata_from_disk_to_memory(char *filepath)
 	char mdata_file_path[MAX_PATH_NAME_SIZE];
 	strcpy(mdata_file_path,MDATA_PATH);
 	strcat(mdata_file_path,filepath);		
-	CBLK new_mdata_block = get_free_cache_block(meta_data_cache,&result);
-	if(result == WRITE_BACK)
-	{
-		write_metadata_to_disk(new_mdata_block->mdata,MDATA_PATH);	
-	}
+	CBLK new_mdata_block;
 	int fd;
 	fd = open(mdata_file_path,O_RDONLY);
 	if(fd<0)
@@ -91,14 +97,34 @@ CBLK mdata_from_disk_to_memory(char *filepath)
 	printf("\nmdata file path : %s\n",mdata_file_path);
 	char buf[MAX_MDATA_FILE_SIZE];
 	int bytes_read;
+	char fileName[MAX_FILE_NAME_SIZE ];
 	bytes_read = read(fd,buf,MAX_MDATA_FILE_SIZE);
 	printf("\nBytes read: %d\n",bytes_read);
 	if(bytes_read < 0)
 		return NULL;
 	else
 	{
+		if(sscanf(buf,"Filename:%s\n%*s",fileName) == 1 ) {
+			new_mdata_block = find_meta_data_block(meta_data_cache,fileName );
+			if(new_mdata_block == NULL) {
+				new_mdata_block = get_free_cache_block(meta_data_cache,&result);
+				if(result == WRITE_BACK)
+				{
+					write_metadata_to_disk(new_mdata_block->mdata,MDATA_PATH);	
+				}
+			} else { // Meta block is already found in cache because of hard link 
+				update_lru(meta_data_cache,new_mdata_block);
+				return new_mdata_block;
+			}
+	
+		} else {
+			printf("Fetching filename failed\n");
+			return NULL;
+		}
+
 		char paths[MAX_MDATA_FILE_SIZE];
-		if ( sscanf(buf,"Filename:%s\nNumPaths:%d\nSize:%d\nPaths:%s",new_mdata_block->mdata->file_name,&(new_mdata_block->mdata->num_paths),&(new_mdata_block->mdata->size),paths) != 4 ) {
+		char link_names[MAX_LINKS * MAX_FILE_NAME_SIZE ];
+		if ( sscanf(buf,"Filename:%s\nNumPaths:%d\nSize:%d\nPaths:%s\nLinks:%s\nNumLinks:%d",new_mdata_block->mdata->file_name,&(new_mdata_block->mdata->num_paths),&(new_mdata_block->mdata->size),paths,link_names,new_mdata_block->mdata->num_links ) != 6 ) {
 			printf("parsing metadata file failed\n");
 			return NULL;
 		} else {
@@ -118,6 +144,19 @@ CBLK mdata_from_disk_to_memory(char *filepath)
 			j++;
 			new_mdata_block->mdata->path[i][offset] = '\0';
 		}
+
+		j=0;
+                for(i=0;i < new_mdata_block->mdata->num_links;i++) {
+                        offset=0;
+                        while(link_names[j]!= ';') {
+                                new_mdata_block->mdata->link_names[i][offset] = link_names[j];
+                                offset++;
+                                j++;
+                        }
+                        j++;
+                        new_mdata_block->mdata->link_names[i][offset] = '\0';
+                }
+	
 		update_lru(meta_data_cache,new_mdata_block);
 		return new_mdata_block;
 	}	
@@ -155,9 +194,10 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 	} else {
 		update_lru(meta_data_cache,meta_data_block);
 	}
-        print_cache_block(meta_data_block);
+//        print_cache_block(meta_data_block);
 
-	//print_cache(buffer_cache);
+	print_cache(meta_data_cache);
+//	print_cache(buffer_cache);
 	CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
 
         if( wbuf_data_block == NULL )
@@ -244,33 +284,58 @@ static int lfs_unlink(const char *path)
                 printf("UNLINK : meta_data_block is not found in cache , hence allocating new\n");
         } 
 
+	int flag=0;
+	if ( meta_data_block->mdata->num_links !=0 ) {
+		int i=0,j=0;
+		flag = 1;
+		for(i=0;i<meta_data_block->mdata->num_links;i++) {
+			if(strcmp(meta_data_block->mdata->link_names[i],path+1) == 0) {
+				if ( i != meta_data_block->mdata->num_links-1 ) {
+					for(j=i;j<meta_data_block->mdata->num_links-1;j++ ) {
+						strcpy(meta_data_block->mdata->link_names[j],meta_data_block->mdata->link_names[j+1]);
+					}	
+				}
+
+			}
+		}	
+
+		meta_data_block->mdata->num_links--;
+		write_metadata_to_disk(meta_data_block->mdata,MDATA_PATH);
+			
+			
+	}
 //        print_cache_block(meta_data_block);
 
   //      print_cache(buffer_cache);
 
 
         int i;
-        for(i=0;i<meta_data_block->mdata->num_paths;i++) {
-                unlink(meta_data_block->mdata->path[i]);
-		printf("Removing Chunk : %s\n", meta_data_block->mdata->path[i]);
-        }
+	if ( flag == 0) { // if no links present 
+
+		for(i=0;i<meta_data_block->mdata->num_paths;i++) {
+			unlink(meta_data_block->mdata->path[i]);
+			printf("Removing Chunk : %s\n", meta_data_block->mdata->path[i]);
+		}
+
+	}
 	
 	char metadata_file[MAX_PATH_NAME_SIZE];
 	strcpy(metadata_file,MDATA_PATH);
 	strcat(metadata_file,path);
 	unlink(metadata_file);
 
-	free_cache_block(meta_data_cache,meta_data_block);
+	if ( flag == 0) {
+		free_cache_block(meta_data_cache,meta_data_block);
 
-	printf("METADATA CACHE AFTER FREEING\n");
-	print_cache(meta_data_cache);
-        CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
-        if(wbuf_data_block != NULL) {
-		free_cache_block(buffer_cache,wbuf_data_block);
-		printf("BUFFER CACHE AFTER FREEING\n");
-		print_cache(buffer_cache);
-        }
-
+		printf("METADATA CACHE AFTER FREEING\n");
+		print_cache(meta_data_cache);
+		CBLK wbuf_data_block = find_meta_data_block(buffer_cache,path+1);
+		if(wbuf_data_block != NULL) {
+			free_cache_block(buffer_cache,wbuf_data_block);
+			printf("BUFFER CACHE AFTER FREEING\n");
+			print_cache(buffer_cache);
+		}
+	}
 	strcpy(load_path,LOAD_PATH);
 	strcat(load_path,path);
 	res = unlink(load_path);
@@ -283,7 +348,6 @@ static int lfs_unlink(const char *path)
 	return 0;
 }
 
-
 static int lfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
 	int res;
@@ -293,6 +357,7 @@ static int lfs_mknod(const char *path, mode_t mode, dev_t rdev)
 	strcpy(load_path,LOAD_PATH);
 	strcat(load_path,path);
 
+	printf("\n\n\n In lfs_mknod\n");
 /*
 	struct stat stBuf;
 	int tmpRes = stat(load_path,&stBuf) ;
@@ -303,6 +368,7 @@ static int lfs_mknod(const char *path, mode_t mode, dev_t rdev)
 */
 
 	if (S_ISREG(mode)) {
+		printf("\nIn regular file mode\n");
 		res = open(load_path, O_CREAT | O_EXCL | O_WRONLY, mode);
 		strcpy(file_mdata_path,MDATA_PATH);
 		strcat(file_mdata_path,path);
@@ -382,10 +448,45 @@ static int lfs_link(const char *from, const char *to)
 {
 	int res;
 
-	res = link(from, to);
+	printf("\n\n\n In lfs_link from:%s to:%s\n",from,to);
+	char fromPath[MAX_PATH_NAME_SIZE];
+	char toPath[MAX_PATH_NAME_SIZE];
+
+        strcpy(fromPath,MDATA_PATH);
+        strcat(fromPath,from);
+
+	strcpy(toPath,MDATA_PATH);
+	strcat(toPath,to);
+
+	res = link(fromPath, toPath);
+	if (res <0 )
+		return -errno;
+
+
+	strcpy(load_path,LOAD_PATH);
+	strcat(load_path,to);
+	res = open(load_path, O_CREAT | O_EXCL | O_WRONLY);
+
 	if (res == -1)
 		return -errno;
 
+	res = close(res);
+
+	CBLK meta_data_block = find_meta_data_block(meta_data_cache,to+1); 
+	if ( meta_data_block == NULL ) {
+                meta_data_block = mdata_from_disk_to_memory(to);
+                assert(meta_data_block);
+                printf("LINK : meta_data_block is not found in cache , hence allocating new\n");
+        } else {
+                update_lru(meta_data_cache,meta_data_block);
+        }
+
+	strcpy(meta_data_block->mdata->link_names[meta_data_block->mdata->num_links],to+1);
+	meta_data_block->mdata->num_links += 1;
+	write_metadata_to_disk(meta_data_block->mdata,MDATA_PATH);	
+	
+	if(res <0)
+		return -errno;
 	return 0;
 }
 
@@ -474,6 +575,7 @@ static int lfs_utimens(const char *path, const struct timespec ts[2])
 	int res;
 	struct timeval tv[2];
 
+	printf("\n\n\n In utimens\n");
 	tv[0].tv_sec = ts[0].tv_sec;
 	tv[0].tv_usec = ts[0].tv_nsec / 1000;
 	tv[1].tv_sec = ts[1].tv_sec;
