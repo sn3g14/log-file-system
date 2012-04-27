@@ -8,7 +8,7 @@
 #define NORMAL 0
 
 #define WRITE_BUFFER 2
-#define DEBUG_CACHE 1
+//#define DEBUG_CACHE 1
 /*
 1) Cache for storing the write buffer
 2) Cache for storing the in-memory meta data

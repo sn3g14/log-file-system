@@ -268,9 +268,9 @@ int create_date_folder(char *time_stamp,char *folder_path,char *folder_name) {
 
 	struct stat statbuf;
 //	int isDir = 0;
-
+#ifdef DEBUG_CACHE
 	printf("Folder path: %s\n",path);
-	
+#endif
 	if (stat(path, &statbuf) == -1) {
 		mkdir(path,0777);
 		return 0;	
@@ -332,11 +332,15 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 				strcpy(lastSeenDate,timestamp);
 				create_date_folder(lastSeenDate,chunk_path,folderName);
 				offset += strlen(line) + 1 ;
-			} else 
+			} else {
+#ifdef DEBUG_CACHE
 				printf("Fetching startTime from timestamp failed.Line is not complete\n"); 
+#endif
+			}
 		} else {
-
+#ifdef DEBUG_CACHE
 			printf("Fetching timestamp from line failed.Line is not complete\n"); 
+#endif
 		}
 	}
 
@@ -349,7 +353,9 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	while(sscanf(wb_block->buf+offset,"%[^\n]\n",line) == 1 ) {
 //		printf("%s\n",line);
 		if ( wb_block->buf[offset+strlen(line)] != '\n' ||    sscanf(line,"%*[^|]|%[^|]|%*s",timestamp) != 1 ) {
+#ifdef DEBUG_CACHE
 			printf("LINE IS NOT COMPLETE\n");
+#endif
 			lineInCompleteFlag = 1;
 			break;
 		}
@@ -365,24 +371,30 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 			if ( stat(chunk_file_name,&statbuf) == -1 ) {		
 
 				fd = open(chunk_file_name,O_CREAT|O_RDWR,0777);
+#ifdef DEBUG_CACHE
 				printf("NEW file : %s File descriptor:%d\n",chunk_file_name,fd);
+#endif
 				write(fd,wb_block->buf+startOffset,offset-startOffset);		
 				close(fd);
 
 				strcpy(wb_block->mdata->path[wb_block->mdata->num_paths++],chunk_file_name);
 			} else {
 				fd = open(chunk_file_name,O_APPEND|O_RDWR,0777);
+#ifdef DEBUG_CACHE
 				printf("APPENDING file : %s File descriptor:%d\n",chunk_file_name,fd);
+#endif
 				write(fd,wb_block->buf+startOffset,offset-startOffset);		
 				close(fd);
 
 			}
 			wb_block->mdata->size += offset-startOffset;
 
+
+#ifdef DEBUG_CACHE
 			printf("Current buf start : %d , buf end : %d\n",startOffset,offset);
 			write(1,wb_block->buf+startOffset,offset-startOffset);
 			printf("==============\n");
-
+#endif
 			sscanf(timestamp,"%*[^ ] %*[^ ] %*[^ ] %[^ ] %*[^ ] %*s",startTime);
 			startOffset = offset; 
 			strcpy(lastSeenDate,timestamp);
@@ -392,8 +404,10 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 		}
 
 		offset += strlen(line) + 1 ;
+
+#ifdef DEBUG_CACHE
 		printf("Offset: %d line : %s\n",offset,line);
-		
+#endif		
 	}
 
 
@@ -414,9 +428,12 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	write(fd,wb_block->buf+startOffset,offset-startOffset);
 	wb_block->mdata->size += offset-startOffset;
 
+
+#ifdef DEBUG_CACHE
 	printf("Current buf start : %d , buf end : %d\n",startOffset,offset);
 	write(1,wb_block->buf+startOffset,offset-startOffset);
 	printf("+++++++++++\n");
+#endif
 	close(fd);
 
 
@@ -424,7 +441,9 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	if ( lineInCompleteFlag == 1 ) {
 		memset(wb_block->buf,0,buffer_cache->cache_block_size);
 		strcpy(wb_block->buf,line);
+#ifdef DEBUG_CACHE
 		printf("REMAINING BUF CONTENT : %s\n",wb_block->buf);
+#endif
 		wb_block->offset = strlen(line);
 	} else {
 		memset(wb_block->buf,0,buffer_cache->cache_block_size);
