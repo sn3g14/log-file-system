@@ -305,6 +305,8 @@ int is_dates_equal(char *timestamp1,char *timestamp2) {
 
 int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 
+	if (wb_block->offset == 0) // The buffer might be flushed due to periodic_flush
+		return 0;
 	int fd; // = open("sample-log",O_RDONLY);
 	//read(fd,wb_block->buf,4096);
 	
@@ -321,10 +323,12 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	char lastSeenDate[50]="";
 	char startTime[50];
 	char folderName[MAX_FILE_NAME_SIZE];
+	char chunk_name[MAX_FILE_NAME_SIZE];
 //	printf("Result : %d\n",sscanf(wb_block->buf+offset,"%[^\n]\n",line));
 //	offset+=strlen(line)+1;
 //	printf("Result : %d\n",sscanf(wb_block->buf+offset,"%[^\n]\n",line));
 
+	
 	if ( sscanf(wb_block->buf+offset,"%[^\n]\n",line) == 1 ) {
 //              printf("%s\n",line);
                 if ( wb_block->buf[offset+strlen(line)] == '\n' && sscanf(line,"%*[^|]|%[^|]|%*s",timestamp) == 1)  {
@@ -345,6 +349,7 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	}
 
 
+	int i;
 	int id=0;
 	char chunk_file_name[MAX_FILE_NAME_SIZE];
 	struct stat statbuf;
@@ -364,7 +369,14 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 			strcpy(chunk_file_name,chunk_path);
 			strcat(chunk_file_name,folderName);
 			strcat(chunk_file_name,"/");
-			strcat(chunk_file_name,wb_block->mdata->file_name);
+	
+			strcpy(chunk_name,wb_block->mdata->file_name);	
+			for( i=1;chunk_name[i]!= '\0';i++) {
+				if(chunk_name[i] == '/')
+					chunk_name[i] = '-';
+			}
+
+			strcat(chunk_file_name,chunk_name);
 			strcat(chunk_file_name,"-");
 			strcat(chunk_file_name,startTime);
 
@@ -414,7 +426,14 @@ int write_buffer_to_disk( CBLK wb_block ,char *chunk_path,CACHE buffer_cache) {
 	strcpy(chunk_file_name,chunk_path);
 	strcat(chunk_file_name,folderName);
 	strcat(chunk_file_name,"/");
-	strcat(chunk_file_name,wb_block->mdata->file_name);
+
+	strcpy(chunk_name,wb_block->mdata->file_name);	
+	for( i=1;chunk_name[i]!= '\0';i++) {
+		if(chunk_name[i] == '/')
+			chunk_name[i] = '-';
+	}
+
+	strcat(chunk_file_name,chunk_name);
 	strcat(chunk_file_name,"-");
 	strcat(chunk_file_name,startTime);
 

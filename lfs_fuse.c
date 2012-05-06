@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <pthread.h>
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
@@ -25,16 +26,18 @@
 #include "Cache.h"
 
 
-#define LOAD_PATH  "/home/vino/Desktop/serverfilesystem"
-#define MDATA_PATH "/home/vino/Desktop/ESS/metadata/"
-#define CHUNK_PATH "/home/vino/Desktop/ESS/Chunks/"
+#define LOAD_PATH  "/home/gokul/Desktop/serverfilesystem"
+#define MDATA_PATH "/home/gokul/Desktop/ESS/metadata/"
+#define CHUNK_PATH "/home/gokul/Desktop/ESS/Chunks/"
 #define MDATA_CBLK_WRITE_THROUGH 1
-//#define DEBUG
+#define DEBUG 1
 
 static char load_path[500];
 CACHE meta_data_cache;
 CACHE buffer_cache;
 int num_writes_called;
+pthread_mutex_t buffer_cache_lock = PTHREAD_MUTEX_INITIALIZER ;
+void* periodic_cache_flush();
 
 
 int write_metadata_to_disk(MDATA *mdata, char *mdata_path)
@@ -183,6 +186,14 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 	strcpy(final_path,MDATA_PATH);
 	strcat(final_path,path);
 	res = lstat(final_path, stbuf);
+
+	if(S_IFDIR == (stbuf->st_mode & S_IFDIR))
+	{
+#ifdef DEBUG
+		printf("Inside directory \n");
+#endif	
+		return 0;
+	}
 
 	if (res == -1)
 		return -errno;
@@ -437,23 +448,41 @@ static int lfs_mknod(const char *path, mode_t mode, dev_t rdev)
 
 static int lfs_mkdir(const char *path, mode_t mode)
 {
-	int res;
+	int res,res1;
+	
 	strcpy(load_path,LOAD_PATH);
 	strcat(load_path,path);
 	res = mkdir(load_path, mode);
 	if (res == -1)
 		return -errno;
 
+	char mdata_folder_Path[MAX_PATH_NAME_SIZE];
+
+        strcpy(mdata_folder_Path,MDATA_PATH);
+        strcat(mdata_folder_Path,path);
+	
+	res1 = mkdir(mdata_folder_Path, mode);
+	if(res1 == -1)
+		return -errno;
 	return 0;
 }
 
 static int lfs_rmdir(const char *path)
 {
-	int res;
+	int res,res1;
 	strcpy(load_path,LOAD_PATH);
 	strcat(load_path,path);
 	res = rmdir(load_path);
 	if (res == -1)
+		return -errno;
+
+	char mdata_folder_Path[MAX_PATH_NAME_SIZE];
+
+        strcpy(mdata_folder_Path,MDATA_PATH);
+        strcat(mdata_folder_Path,path);
+	
+	res1 = rmdir(mdata_folder_Path);
+	if(res1 == -1)
 		return -errno;
 
 	return 0;
@@ -779,7 +808,9 @@ static int lfs_write(const char *path, const char *buf, size_t size,
 		assert(wbuf_data_block);
 		if(result == WRITE_BACK)
 		{
+		pthread_mutex_lock(&buffer_cache_lock);
 			write_buffer_to_disk(wbuf_data_block,CHUNK_PATH,buffer_cache);
+		pthread_mutex_unlock(&buffer_cache_lock);
 #ifdef MDATA_CBLK_WRITE_THROUGH
 			write_metadata_to_disk(wbuf_data_block->mdata,MDATA_PATH);	
 #endif
@@ -799,7 +830,9 @@ static int lfs_write(const char *path, const char *buf, size_t size,
 #ifdef DEBUG
 		printf("cache_block buffer full and is written to disk\n");
 #endif
+		pthread_mutex_lock(&buffer_cache_lock);
 		write_buffer_to_disk(wbuf_data_block,CHUNK_PATH,buffer_cache);
+		pthread_mutex_unlock(&buffer_cache_lock);
 #ifdef MDATA_CBLK_WRITE_THROUGH
 		write_metadata_to_disk(wbuf_data_block->mdata,MDATA_PATH);	
 #endif
@@ -936,6 +969,27 @@ static struct fuse_operations lfs_oper = {
 #endif
 };
 
+void * periodic_cache_flush() {
+	int i=0;
+
+	while(1) {
+#ifdef DEBUG
+		printf("PERIODIC CACHE FLUSH\n");
+#endif
+		sleep( FLUSH_INTERVAL);
+		pthread_mutex_lock(&buffer_cache_lock);
+		for(i=0;i<buffer_cache->num_blocks;i++) {
+			if(buffer_cache->cblocks[i].free_flag == false && buffer_cache->cblocks[i].offset != 0 ) { 
+#ifdef DEBUG
+				printf("Flush cache block : %d\n" , i);
+#endif
+				 write_buffer_to_disk(buffer_cache->cblocks+i,CHUNK_PATH,buffer_cache);	
+				}
+		}
+		pthread_mutex_unlock(&buffer_cache_lock);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	umask(0);
@@ -944,6 +998,9 @@ int main(int argc, char *argv[])
         
         meta_data_cache = create_cache(100,1,METADATA_CACHE);
 //	printf("meta_data_cache : %p\n",meta_data_cache);
+	pthread_t tid;
+	pthread_create(&tid,NULL,periodic_cache_flush,NULL);
+
 
 	return fuse_main(argc, argv, &lfs_oper, NULL);
 }

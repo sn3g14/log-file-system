@@ -5,6 +5,7 @@
 #define MAX_LINE_SIZE 200
 #define MAX_LINKS 10
 #define LOG_FS_H 1
+#define FLUSH_INTERVAL 60*2
 
 typedef struct lfs_meta_data {
 	char file_name[MAX_FILE_NAME_SIZE];
